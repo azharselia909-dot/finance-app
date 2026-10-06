@@ -1,0 +1,13 @@
+# Python virtual environments & cache
+env/
+venv/
+__pycache__/
+*.py[cod]
+.env
+
+# Node dependencies & builds
+React/node_modules/
+React/build/
+React/dist/
+React/.env
+.DS_Store

@@ -1,0 +1,115 @@
+import React, {useState, useEffect}from "react"
+import api from './api' 
+
+const App = ( ) => {
+  const [transactions, setTransactions] = useState([]);
+  const [formData, setFormData] = useState({
+    amount : '',
+    category : '',
+    description : '',
+    is_income: false,
+    date : ''
+  });
+
+  const fetchTransactions = async () => {
+    const response = await api.get('/transactions/')
+    setTransactions(response.data)
+  }
+
+  useEffect(() => {
+    fetchTransactions();
+  }, []);
+
+  const handleInputChange = (event) => {
+    const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value;
+    setFormData({
+      ...formData, 
+      [event.target.name] : value,
+    });
+  };
+
+  const handleFormSubmit = async (event) => {
+    event.preventDefault();
+    await api.post('/transactions/', formData);
+    fetchTransactions()
+    setFormData({
+      amount : '',
+      category : '',
+      description : '',
+      is_income: false,
+      date : ''
+    });
+  };
+
+  return (
+    <div>
+      <nav className="navbar navbar-dark bg-primary">
+        <div className="container-fluid">
+          <a className="navbar-brand" href="#">
+            Finance App
+          </a>
+        </div>
+      </nav>
+
+      <div className="container">
+        <form onSubmit={handleFormSubmit}>
+            <div className="mb-3 mt-3">
+                <label htmlFor="amount" className="form-label">Enter your Amount: </label>
+                <input type="text" className="form-control" id="amount" name="amount" onChange={handleInputChange} value={formData.amount} />
+            </div>
+          
+            <div className="mb-3">
+                <label htmlFor="category" className="form-label">Enter your category: </label>
+                <input type="text" className="form-control" id="category" name="category" onChange={handleInputChange} value={formData.category} />
+            </div>
+          
+          <div className="mb-3">
+              <label htmlFor="description" className="form-label">Enter your Description: </label>
+              <input type="text" className="form-control" id="description" name="description" onChange={handleInputChange} value={formData.description} />
+          </div>
+          
+          <div className="mb-3">
+              <label htmlFor="is_income" className="form-label">Enter your Income: </label>
+              <input type="checkbox" className="form-control" id="is_income" name="is_income" onChange={handleInputChange} value={formData.is_income ?? false } />
+          </div>
+          
+          <div className="mb-3">
+              <label htmlFor="date" className="form-label">Enter your Date: </label>
+              <input type="text" className="form-control" id="date" name="date" onChange={handleInputChange} value={formData.date } />
+          </div>
+
+          <button type="submit" className="btn btn-primary"> Submit</button>
+          
+        </form>
+
+        <table className="table-auto w-full text-left border-collapse border border-gray-300">
+          <thead className="bg-blue-100">
+            <tr>
+              <th className="px-6 py-3 font-medium text-gray-700">Amount</th>
+              <th className="px-6 py-3 font-medium text-gray-700">Category</th>
+              <th className="px-6 py-3 font-medium text-gray-700">Description</th>
+              <th className="px-6 py-3 font-medium text-gray-700">Income</th>
+              <th className="px-6 py-3 font-medium text-gray-700">date</th>
+            </tr>
+          </thead>
+          <tbody>
+            {transactions.map((transaction) => (
+              <tr key={transaction.id} className="border-b hover:bg-gray-50">
+                <td className="px-6 py-3">{transaction.amount}</td>
+                <td className="px-6 py-3">{transaction.description}</td>
+                <td className="px-6 py-3">{transaction.category}</td>
+                <td className="px-6 py-3">{transaction.is_income ? 'Yes' : 'No'}</td>
+                <td className="px-6 py-3">{transaction.date}</td>
+              </tr>
+            ))}
+          </tbody>
+      </table>
+      </div>
+
+    </div>
+
+  )
+
+}
+
+export default App
