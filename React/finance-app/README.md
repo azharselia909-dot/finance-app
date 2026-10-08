@@ -116,7 +116,7 @@ The authenticated FastAPI endpoint is `GET /api/v1/transactions/export`. It stre
 
 The Add transaction and Saved records pages show the account-wide current balance (income minus expenses). It refreshes after creating, importing, editing, or deleting transactions. The balance is provided by the authenticated `GET /api/v1/transactions/balance` endpoint.
 
-Use the **Profile** navigation page to update your name, email address, designation/qualification, and mobile number. The email address is also your sign-in identifier.
+Use the **Profile** navigation page to update your name, email address, designation/qualification, and mobile number. The email address is also your sign-in identifier. You can also change your password from the same page by supplying your current password plus a new password that matches the confirmation field and is at least 8 characters long.
 
 ## Import and browse transactions
 

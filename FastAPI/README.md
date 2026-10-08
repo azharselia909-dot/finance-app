@@ -25,6 +25,9 @@ The records API is authenticated and user-scoped:
 - `GET /auth/me` returns the signed-in user's profile, and `PATCH /auth/me`
   updates username, email, designation, and mobile number. Email and username
   must remain unique; the updated email is used for future sign-ins.
+- `PATCH /auth/me/password` requires the current password and a new, different
+  password of at least 8 characters. The backend verifies the current password,
+  re-hashes the replacement, and rejects incorrect or unchanged values.
 - `GET /api/v1/transactions` supports `page`, `page_size` (maximum 100),
   `search`, `sort_by` (`date`, `description`, `category`, `account`, `type`,
   or `amount`), `sort_order`, exact `category`, and inclusive
