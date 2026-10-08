@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from app.models import Transaction
+from app.models import Account, Transaction
 from app.schemas import TransactionImportRow
 
 logger = logging.getLogger(__name__)
@@ -18,7 +18,9 @@ MAX_IMPORT_ROWS = 20_000
 UPLOAD_CHUNK_SIZE = 64 * 1024
 MAX_REPORTED_ERRORS = 100
 REQUIRED_HEADERS = {"date", "description", "amount", "category"}
-ALLOWED_HEADERS = REQUIRED_HEADERS | {"id", "type", "is_income"}
+ALLOWED_HEADERS = REQUIRED_HEADERS | {
+    "id", "type", "is_income", "account_type", "account_name",
+}
 
 
 def _format_validation_error(error: ValidationError) -> str:
@@ -45,7 +47,13 @@ async def _spool_upload(upload: UploadFile) -> BinaryIO:
         raise
 
 
-async def import_transactions_csv(upload: UploadFile, user_id: int, db: Session) -> int:
+async def import_transactions_csv(
+    upload: UploadFile,
+    user_id: int,
+    account_id: int,
+    accounts_by_name: dict[str, Account],
+    db: Session,
+) -> int:
     filename = (upload.filename or "").strip()
     content_type = (upload.content_type or "").split(";", 1)[0].strip().casefold()
     if not filename.casefold().endswith(".csv"):
@@ -97,6 +105,9 @@ async def import_transactions_csv(upload: UploadFile, user_id: int, db: Session)
                 row_errors = ["row has more values than the header"]
             else:
                 row = {key: (value or "").strip() for key, value in raw_row.items()}
+                for optional_field in ("account_name", "account_type"):
+                    if not row.get(optional_field):
+                        row.pop(optional_field, None)
                 if "is_income" in headers:
                     bool_value = row.get("is_income", "").casefold()
                     if bool_value not in {"true", "false", "1", "0"}:
@@ -113,21 +124,30 @@ async def import_transactions_csv(upload: UploadFile, user_id: int, db: Session)
                     except ValidationError as exc:
                         row_errors = [_format_validation_error(exc)]
                     else:
-                        pending_transactions.append(
-                            Transaction(
-                                user_id=user_id,
-                                date=parsed.date.isoformat(),
-                                description=parsed.description,
-                                amount=parsed.amount,
-                                category=parsed.category,
-                                is_income=parsed.is_income_value,
+                        account = accounts_by_name.get(parsed.account_name) if parsed.account_name else None
+                        if parsed.account_name and account is None:
+                            row_errors = [f"account_name: unknown account '{parsed.account_name}'"]
+                        elif parsed.account_type and not parsed.account_name:
+                            row_errors = ["account_name is required when account_type is provided"]
+                        elif account and parsed.account_type and account.account_type != parsed.account_type:
+                            row_errors = ["account_type does not match the selected account"]
+                        else:
+                            pending_transactions.append(
+                                Transaction(
+                                    user_id=user_id,
+                                    account_id=account.id if account else account_id,
+                                    date=parsed.date.isoformat(),
+                                    description=parsed.description,
+                                    amount=parsed.amount,
+                                    category=parsed.category,
+                                    is_income=parsed.is_income_value,
+                                )
                             )
-                        )
-                        if len(pending_transactions) >= 500:
-                            db.add_all(pending_transactions)
-                            db.flush()
-                            imported_count += len(pending_transactions)
-                            pending_transactions.clear()
+                            if len(pending_transactions) >= 500:
+                                db.add_all(pending_transactions)
+                                db.flush()
+                                imported_count += len(pending_transactions)
+                                pending_transactions.clear()
 
             for message in row_errors:
                 error_count += 1

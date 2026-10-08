@@ -11,3 +11,9 @@ React/build/
 React/dist/
 React/.env
 .DS_Store
+
+# Ignore Python cache directories and bytecode
+__pycache__/
+*.pyc
+*.pyo
+*.pyd

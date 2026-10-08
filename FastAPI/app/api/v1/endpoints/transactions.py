@@ -5,13 +5,14 @@ from datetime import date
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import Numeric, cast
+from sqlalchemy.exc import SQLAlchemyError
 
 from app.api.dependencies import DbSession, get_current_user
 from app.db.session import SessionLocal
-from app.models import Transaction, User
+from app.models import Account, Transaction, User
 from app.schemas import (
     PaginatedTransactionsResponse,
     TransactionBalanceResponse,
@@ -24,7 +25,6 @@ from app.schemas import (
 from app.services.rate_limits import enforce_user_rate_limit
 from app.services.transactions import import_transactions_csv
 
-from sqlalchemy.exc import SQLAlchemyError
 import logging
 
 logger = logging.getLogger(__name__)
@@ -32,11 +32,29 @@ logger = logging.getLogger(__name__)
 legacy_router = APIRouter(tags=["legacy-transactions"])
 router = APIRouter(prefix="/api/v1/transactions", tags=["transactions"])
 
-SortField = Literal["date", "description", "category", "type", "amount"]
+SortField = Literal["date", "description", "category", "account", "type", "amount"]
 SortOrder = Literal["asc", "desc"]
 
 
-@legacy_router.post("/transactions/", response_model=TransactionModel)
+def get_or_create_cash_account(db, user_id: int) -> Account:
+    account = (
+        db.query(Account)
+        .filter(Account.user_id == user_id, Account.name == "Cash")
+        .first()
+    )
+    if account is None:
+        account = Account(
+            user_id=user_id,
+            name="Cash",
+            account_type="cash",
+            opening_balance=Decimal("0.00"),
+        )
+        db.add(account)
+        db.flush()
+    return account
+
+
+@legacy_router.post("/transactions/", response_model=TransactionModel, status_code=status.HTTP_201_CREATED)
 async def create_transaction(
     transaction: TransactionCreate,
     db: DbSession,
@@ -44,10 +62,25 @@ async def create_transaction(
 ) -> TransactionModel:
     transaction_data = transaction.model_dump()
     transaction_data["date"] = transaction.date.isoformat()
+    account = (
+        db.query(Account)
+        .filter(
+            Account.id == transaction.account_id,
+            Account.user_id == current_user.id,
+        )
+        .first()
+    )
+    if account is None:
+        raise HTTPException(status_code=404, detail="Account not found")
     db_transaction = Transaction(**transaction_data, user_id=current_user.id)
     db.add(db_transaction)
-    db.commit()
-    db.refresh(db_transaction)
+    try:
+        db.commit()
+        db.refresh(db_transaction)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        logger.exception("Transaction creation failed")
+        raise HTTPException(status_code=500, detail="Transaction could not be created") from exc
     return db_transaction
 
 
@@ -92,7 +125,14 @@ async def get_transaction_balance(
     db: DbSession,
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TransactionBalanceResponse:
-    balance = Decimal("0.00")
+    balance = sum(
+        (
+            account.opening_balance
+            for account in db.query(Account.opening_balance)
+            .filter(Account.user_id == current_user.id)
+        ),
+        Decimal("0.00"),
+    )
     transactions = (
         db.query(Transaction.amount, Transaction.is_income)
         .filter(Transaction.user_id == current_user.id)
@@ -120,19 +160,26 @@ async def export_transactions(
     def generate_csv() -> Iterator[str]:
         buffer = io.StringIO(newline="")
         writer = csv.writer(buffer)
-        writer.writerow(["id", "date", "category", "description", "amount", "is_income"])
+        writer.writerow([
+            "id", "date", "category", "description", "amount", "is_income",
+            "account_type", "account_name",
+        ])
         yield buffer.getvalue()
         buffer.seek(0)
         buffer.truncate(0)
 
         with SessionLocal() as export_db:
-            query = export_db.query(Transaction).filter(Transaction.user_id == current_user.id)
+            query = (
+                export_db.query(Transaction, Account)
+                .outerjoin(Account, Transaction.account_id == Account.id)
+                .filter(Transaction.user_id == current_user.id)
+            )
             if parsed_start_date:
                 query = query.filter(Transaction.date >= parsed_start_date.isoformat())
             if parsed_end_date:
                 query = query.filter(Transaction.date <= parsed_end_date.isoformat())
 
-            for transaction in query.order_by(Transaction.date, Transaction.id).yield_per(500):
+            for transaction, account in query.order_by(Transaction.date, Transaction.id).yield_per(500):
                 writer.writerow([
                     transaction.id,
                     safe_csv_text(transaction.date),
@@ -140,6 +187,8 @@ async def export_transactions(
                     safe_csv_text(transaction.description),
                     transaction.amount,
                     str(transaction.is_income).lower(),
+                    account.account_type if account else "",
+                    safe_csv_text(account.name if account else ""),
                 ])
                 yield buffer.getvalue()
                 buffer.seek(0)
@@ -168,12 +217,18 @@ async def list_transactions(
     date_range: str | None = Query(default=None, max_length=21),
 ) -> PaginatedTransactionsResponse:
     start_date, end_date = parse_date_range(date_range)
-    query = db.query(Transaction).filter(Transaction.user_id == current_user.id)
+    query = (
+        db.query(Transaction, Account)
+        .outerjoin(Account, Transaction.account_id == Account.id)
+        .filter(Transaction.user_id == current_user.id)
+    )
     if search:
         escaped_search = search.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
         query = query.filter(
             Transaction.description.ilike(f"%{escaped_search}%", escape="\\")
             | Transaction.category.ilike(f"%{escaped_search}%", escape="\\")
+            | Account.name.ilike(f"%{escaped_search}%", escape="\\")
+            | Account.account_type.ilike(f"%{escaped_search}%", escape="\\")
         )
     if category:
         query = query.filter(Transaction.category == category)
@@ -187,6 +242,7 @@ async def list_transactions(
         "date": Transaction.date,
         "description": Transaction.description,
         "category": Transaction.category,
+        "account": Account.name,
         "type": Transaction.is_income,
         "amount": cast(Transaction.amount, Numeric(14, 2)),
     }
@@ -207,8 +263,11 @@ async def list_transactions(
             category=transaction.category,
             type="income" if transaction.is_income else "expense",
             amount=transaction.amount,
+            account_id=transaction.account_id,
+            account_name=account.name if account else None,
+            account_type=account.account_type if account else None,
         )
-        for transaction in transactions
+        for transaction, account in transactions
     ]
     return PaginatedTransactionsResponse(
         items=items,
@@ -261,6 +320,11 @@ async def update_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
 
     changes = update.model_dump(exclude_unset=True)
+    if "account_id" in changes and not db.query(Account.id).filter(
+        Account.id == changes["account_id"],
+        Account.user_id == current_user.id,
+    ).first():
+        raise HTTPException(status_code=404, detail="Account not found")
     if "date" in changes:
         changes["date"] = changes["date"].isoformat()
 
@@ -317,5 +381,16 @@ async def import_transactions(
     current_user: Annotated[User, Depends(get_current_user)],
 ) -> TransactionImportResponse:
     enforce_user_rate_limit(db, current_user.id, "transaction_import")
-    imported_count = await import_transactions_csv(upload, current_user.id, db)
+    account = get_or_create_cash_account(db, current_user.id)
+    accounts_by_name = {
+        owned_account.name: owned_account
+        for owned_account in db.query(Account).filter(Account.user_id == current_user.id)
+    }
+    imported_count = await import_transactions_csv(
+        upload,
+        current_user.id,
+        account.id,
+        accounts_by_name,
+        db,
+    )
     return TransactionImportResponse(imported=imported_count)

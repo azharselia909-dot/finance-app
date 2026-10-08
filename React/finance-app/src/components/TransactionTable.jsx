@@ -9,13 +9,14 @@ const columns = [
   ['date', 'Date'],
   ['description', 'Description'],
   ['category', 'Category'],
+  ['account', 'Account'],
   ['type', 'Type'],
   ['amount', 'Amount'],
 ]
 
 /**
  * @param {{
- *   items: Array<{ id: number, date: string, description: string, category: string, type: 'income' | 'expense', amount: string | number }>,
+ *   items: Array<{ id: number, date: string, description: string, category: string, type: 'income' | 'expense', amount: string | number, account_name: string | null, account_type: string | null }>,
  *   total: number,
  *   page: number,
  *   pageSize: number,
@@ -31,7 +32,7 @@ const columns = [
  *   onToggleCurrentPage: (checked: boolean) => void,
  *   deletingIds: Set<number>,
  *   onDeleteTransaction: (id: number) => void,
- *   onEditTransaction: (transaction: { id: number, date: string, description: string, category: string, type: 'income' | 'expense', amount: string | number }) => void
+ *   onEditTransaction: (transaction: { id: number, date: string, description: string, category: string, type: 'income' | 'expense', amount: string | number, account_id: number | null, account_name: string | null, account_type: string | null }) => void
  * }} props
  */
 function TransactionTable({
@@ -88,8 +89,8 @@ const canSelectCurrentPage =
             </tr>
           </thead>
           <tbody>
-            {isLoading && items.length === 0 && <tr><td colSpan="7" className="table-message">Loading transactions...</td></tr>}
-            {!isLoading && items.length === 0 && <tr><td colSpan="7" className="table-message">No transactions match these filters.</td></tr>}
+            {isLoading && items.length === 0 && <tr><td colSpan="8" className="table-message">Loading transactions...</td></tr>}
+            {!isLoading && items.length === 0 && <tr><td colSpan="8" className="table-message">No transactions match these filters.</td></tr>}
             {items.map((transaction) => (
               <tr key={transaction.id}>
                 <td data-label="Select">
@@ -104,6 +105,11 @@ const canSelectCurrentPage =
                 <td data-label="Date">{transaction.date}</td>
                 <td data-label="Description" className="table-description">{transaction.description || '—'}</td>
                 <td data-label="Category">{transaction.category}</td>
+                <td data-label="Account">
+                  {transaction.account_name
+                    ? <><span className="table-account-type">{transaction.account_type}</span>{transaction.account_name}</>
+                    : 'Unassigned'}
+                </td>
                 <td data-label="Type"><span className={`table-type ${transaction.type}`}>{transaction.type}</span></td>
                 <td data-label="Amount" className={`table-amount ${transaction.type}`}>
                   {transaction.type === 'income' ? '+' : '−'}{currencyFormatter.format(Math.abs(Number(transaction.amount)))}

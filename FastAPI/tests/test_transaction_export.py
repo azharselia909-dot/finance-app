@@ -27,16 +27,34 @@ database.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=_te
 
 import app.main as main
 from app.api.dependencies import get_current_user
+from app.api.v1.endpoints.accounts import (
+    create_account,
+    list_accounts,
+    router as accounts_router,
+)
 from app.api.v1.endpoints.transactions import (
+    create_transaction,
     export_transactions,
+    get_transaction_balance,
     import_transactions,
     list_transactions,
     router as transactions_router,
 )
-from app.api.v1.endpoints.auth import router as auth_router, update_current_user
+from app.api.v1.endpoints.auth import (
+    router as auth_router,
+    update_current_user,
+    update_current_user_password,
+)
+from app.core.security import password_hash
 from app.db.session import Base
-from app.models import ApiRateLimitBucket, Transaction, User
-from app.schemas import UserUpdate
+from app.models import Account, ApiRateLimitBucket, Transaction, User
+from app.schemas import (
+    AccountCreate,
+    PasswordUpdateRequest,
+    TransactionCreate,
+    TransactionUpdate,
+    UserUpdate,
+)
 from app.services.rate_limits import enforce_user_rate_limit
 
 Base.metadata.create_all(bind=_test_engine)
@@ -53,6 +71,7 @@ class TransactionExportTests(unittest.IsolatedAsyncioTestCase):
         self.db = database.SessionLocal()
         self.db.query(ApiRateLimitBucket).delete()
         self.db.query(Transaction).delete()
+        self.db.query(Account).delete()
         self.db.query(User).delete()
         self.db.commit()
 
@@ -189,6 +208,22 @@ class TransactionExportTests(unittest.IsolatedAsyncioTestCase):
             )
         )
 
+    def test_account_routes_require_authenticated_user(self):
+        routes = [
+            route for route in accounts_router.routes
+            if isinstance(route, APIRoute)
+        ]
+        self.assertEqual(len(routes), 2)
+        self.assertTrue({"/api/v1/accounts"}.issubset(main.app.openapi()["paths"]))
+        for route in routes:
+            self.assertTrue(
+                any(
+                    dependency.call is get_current_user
+                    for dependency in route.dependant.dependencies
+                ),
+                f"{route.path} must require an authenticated user",
+            )
+
     async def test_paginated_listing_filters_sorts_and_scopes_by_owner(self):
         self._add_transaction(self.user.id, "2025-04-01", "Food", "Lunch")
         self._add_transaction(
@@ -213,6 +248,99 @@ class TransactionExportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result.total_pages, 2)
         self.assertEqual(result.items[0].description, "Apartment")
         self.assertEqual(result.items[0].amount, Decimal("100.05"))
+
+    async def test_account_balances_follow_owned_income_and_expense_transactions(self):
+        cash = await create_account(
+            AccountCreate(name="Everyday cash", account_type="cash", opening_balance="25.00"),
+            db=self.db,
+            current_user=self.user,
+        )
+        wallet = await create_account(
+            AccountCreate(name="Travel wallet", account_type="wallet", opening_balance="10.00"),
+            db=self.db,
+            current_user=self.user,
+        )
+        other_account = await create_account(
+            AccountCreate(name="Private bank", account_type="bank"),
+            db=self.db,
+            current_user=self.other_user,
+        )
+
+        await create_transaction(
+            TransactionCreate(
+                description="Payday",
+                amount="100.00",
+                date="2025-04-01",
+                category="Salary",
+                is_income=True,
+                account_id=cash.id,
+            ),
+            db=self.db,
+            current_user=self.user,
+        )
+        await create_transaction(
+            TransactionCreate(
+                description="Coffee",
+                amount="7.50",
+                date="2025-04-02",
+                category="Food",
+                is_income=False,
+                account_id=cash.id,
+            ),
+            db=self.db,
+            current_user=self.user,
+        )
+        self._add_transaction(
+            self.other_user.id,
+            "2025-04-03",
+            "Private",
+            "Other user's row",
+            Decimal("999.00"),
+        )
+
+        accounts = await list_accounts(db=self.db, current_user=self.user)
+        balances = {account.id: account.balance for account in accounts}
+        self.assertEqual(balances, {cash.id: Decimal("117.50"), wallet.id: Decimal("10.00")})
+        overall_balance = await get_transaction_balance(db=self.db, current_user=self.user)
+        self.assertEqual(overall_balance.balance, "127.50")
+        listed = await list_transactions(
+            db=self.db,
+            current_user=self.user,
+            page=1,
+            page_size=20,
+            search="",
+            sort_by="date",
+            sort_order="desc",
+            category=None,
+            date_range=None,
+        )
+        self.assertEqual(listed.total, 2)
+        self.assertEqual(listed.items[0].account_name, "Everyday cash")
+        self.assertEqual(listed.items[0].account_type, "cash")
+        self.assertNotEqual(other_account.id, cash.id)
+
+    async def test_transaction_rejects_account_owned_by_another_user(self):
+        account = await create_account(
+            AccountCreate(name="Other user's bank", account_type="bank"),
+            db=self.db,
+            current_user=self.other_user,
+        )
+
+        with self.assertRaises(HTTPException) as raised:
+            await create_transaction(
+                TransactionCreate(
+                    description="Should not be stored",
+                    amount="12.00",
+                    date="2025-04-01",
+                    category="Test",
+                    is_income=True,
+                    account_id=account.id,
+                ),
+                db=self.db,
+                current_user=self.user,
+            )
+        self.assertEqual(raised.exception.status_code, 404)
+        self.assertEqual(self.db.query(Transaction).filter(Transaction.user_id == self.user.id).count(), 0)
 
     async def test_paginated_listing_searches_and_filters_inclusive_dates(self):
         self._add_transaction(self.user.id, "2025-04-01", "Food", "Lunch")
@@ -287,6 +415,31 @@ class TransactionExportTests(unittest.IsolatedAsyncioTestCase):
             self.db.query(Transaction).filter_by(user_id=self.user.id).count(),
             1,
         )
+
+    async def test_csv_import_preserves_selected_account_from_export_columns(self):
+        account = await create_account(
+            AccountCreate(name="Main checking", account_type="bank"),
+            db=self.db,
+            current_user=self.user,
+        )
+        upload = UploadFile(
+            file=BytesIO(
+                b"id,date,category,description,amount,is_income,account_type,account_name\n"
+                b"1,2025-04-01,Salary,Payday,500.00,true,bank,Main checking\n"
+            ),
+            filename="transactions.csv",
+            headers=Headers({"content-type": "text/csv"}),
+        )
+
+        result = await import_transactions(
+            upload=upload,
+            db=self.db,
+            current_user=self.user,
+        )
+
+        imported = self.db.query(Transaction).filter_by(user_id=self.user.id).one()
+        self.assertEqual(result.imported, 1)
+        self.assertEqual(imported.account_id, account.id)
 
     async def test_csv_upload_rejects_wrong_extension(self):
         upload = UploadFile(
@@ -374,6 +527,39 @@ class TransactionExportTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(raised.exception.status_code, 409)
         self.assertEqual(self.user.email, "export@example.com")
+
+    async def test_password_update_rehashes_a_new_password(self):
+        self.user.hashed_password = password_hash.hash("CurrentPassword123")
+        self.db.commit()
+
+        result = await update_current_user_password(
+            PasswordUpdateRequest(
+                current_password="CurrentPassword123",
+                new_password="UpdatedPassword456",
+            ),
+            self.db,
+            self.user,
+        )
+
+        self.assertEqual(result.id, self.user.id)
+        self.assertTrue(password_hash.verify("UpdatedPassword456", self.user.hashed_password))
+        self.assertFalse(password_hash.verify("CurrentPassword123", self.user.hashed_password))
+
+    async def test_password_update_rejects_wrong_current_password(self):
+        self.user.hashed_password = password_hash.hash("CurrentPassword123")
+        self.db.commit()
+
+        with self.assertRaises(HTTPException) as raised:
+            await update_current_user_password(
+                PasswordUpdateRequest(
+                    current_password="WrongPassword123",
+                    new_password="UpdatedPassword456",
+                ),
+                self.db,
+                self.user,
+            )
+
+        self.assertEqual(raised.exception.status_code, 401)
 
     def test_profile_update_rejects_empty_or_null_updates(self):
         with self.assertRaises(ValueError):

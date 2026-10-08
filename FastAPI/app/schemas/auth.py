@@ -74,6 +74,19 @@ class UserUpdate(BaseModel):
         return self
 
 
+class PasswordUpdateRequest(BaseModel):
+    current_password: str = Field(min_length=8, max_length=128)
+    new_password: str = Field(min_length=8, max_length=128)
+
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    @model_validator(mode="after")
+    def validate_password_change(self) -> "PasswordUpdateRequest":
+        if self.current_password == self.new_password:
+            raise ValueError("New password must be different from the current password")
+        return self
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str

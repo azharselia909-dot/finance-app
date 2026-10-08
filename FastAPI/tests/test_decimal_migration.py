@@ -3,6 +3,7 @@ import unittest
 from sqlalchemy import create_engine, inspect, text
 
 from scripts.migrate_decimal_amount import upgrade
+from scripts.migrate_accounts import upgrade as upgrade_accounts
 
 
 class DecimalMigrationTests(unittest.TestCase):
@@ -69,6 +70,24 @@ class DecimalMigrationTests(unittest.TestCase):
         engine = create_engine("sqlite://")
         try:
             upgrade(engine)
+        finally:
+            engine.dispose()
+
+    def test_account_migration_assigns_owned_legacy_rows_and_is_repeatable(self):
+        engine = self._make_legacy_engine()
+        try:
+            upgrade_accounts(engine)
+            upgrade_accounts(engine)
+
+            with engine.connect() as connection:
+                account = connection.execute(
+                    text("SELECT id, user_id, name, account_type FROM accounts")
+                ).one()
+                transaction = connection.execute(
+                    text("SELECT account_id FROM transactions WHERE id = 1")
+                ).scalar_one()
+
+            self.assertEqual(tuple(account), (transaction, 7, "Cash", "cash"))
         finally:
             engine.dispose()
 

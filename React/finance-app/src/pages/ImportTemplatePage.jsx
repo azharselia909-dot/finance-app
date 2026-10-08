@@ -27,16 +27,18 @@ function ImportTemplatePage() {
           <div><code>amount</code><span>Required · positive amount, up to 2 decimal places</span></div>
           <div><code>category</code><span>Required · up to 100 characters</span></div>
           <div><code>type</code><span>Required · income or expense</span></div>
+          <div><code>account_type</code><span>Optional · cash, wallet, or bank</span></div>
+          <div><code>account_name</code><span>Optional · use an existing account name and type</span></div>
         </div>
         <div className="template-example">
           <p className="section-kicker">Example row format</p>
-          <code>2026-10-06,Paycheck,2500.00,Salary,income</code>
+          <code>2026-10-06,Paycheck,2500.00,Salary,income,bank,Checking</code>
           <small>Example only. Add your own transaction rows after downloading the template.</small>
         </div>
         <button className="submit-button template-download" type="button" onClick={downloadTransactionImportTemplate}>
           Download CSV template <span aria-hidden="true">↓</span>
         </button>
-        <p className="template-note">CSV files only · Maximum file size 5 MB · Uploads with invalid rows are not imported.</p>
+        <p className="template-note">CSV files only · Maximum file size 5 MB · Uploads with invalid rows are not imported. Omit account columns to import into Cash; specified accounts must already exist.</p>
       </section>
     </main>
   )

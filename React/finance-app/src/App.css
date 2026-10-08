@@ -75,6 +75,8 @@ h2 { color: #21302b; font-family: Georgia, serif; font-size: 1.65rem; font-weigh
 .field-group label, .field-group legend { color: #47564d; font-size: .78rem; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; }
 .field-group label span { color: #9aa69e; font-weight: 400; letter-spacing: 0; text-transform: none; }
 input { background: #f7f9f4; border: 1px solid #d8e0d8; border-radius: 3px; box-sizing: border-box; color: #21302b; font: inherit; outline: none; padding: 13px 14px; transition: border-color .2s, box-shadow .2s; width: 100%; }
+select { background: #f7f9f4; border: 1px solid #d8e0d8; border-radius: 3px; box-sizing: border-box; color: #21302b; font: inherit; outline: none; padding: 13px 14px; transition: border-color .2s, box-shadow .2s; width: 100%; }
+select:focus { border-color: #2c805c; box-shadow: 0 0 0 3px rgba(44, 128, 92, .13); }
 input::placeholder { color: #a2ada5; }
 input:focus { border-color: #2c805c; box-shadow: 0 0 0 3px rgba(44, 128, 92, .13); }
 .amount-input { align-items: center; display: flex; background: #f7f9f4; border: 1px solid #d8e0d8; border-radius: 3px; }
@@ -103,7 +105,7 @@ input:focus { border-color: #2c805c; box-shadow: 0 0 0 3px rgba(44, 128, 92, .13
 .records-toolbar { display: flex; justify-content: flex-end; margin: 0 0 14px; }
 .data-table-section { border-top: 1px solid #e1e7df; }
 .table-scroll { overflow-x: auto; width: 100%; }
-.transactions-table { border-collapse: collapse; min-width: 680px; text-align: left; width: 100%; }
+.transactions-table { border-collapse: collapse; min-width: 820px; text-align: left; width: 100%; }
 .transactions-table th, .transactions-table td { border-bottom: 1px solid #e1e7df; padding: 14px 12px; }
 .transactions-table th:first-child, .transactions-table td:first-child { padding-left: 4px; }
 .transactions-table th { color: #829087; font-size: .7rem; letter-spacing: .08em; text-transform: uppercase; }
@@ -111,6 +113,7 @@ input:focus { border-color: #2c805c; box-shadow: 0 0 0 3px rgba(44, 128, 92, .13
 .sort-button { background: transparent; border: 0; color: inherit; cursor: pointer; font: inherit; font-weight: 800; letter-spacing: inherit; padding: 4px 0; text-transform: inherit; }
 .sort-button:hover { color: #2c805c; }
 .table-description { max-width: 280px; overflow-wrap: anywhere; }
+.table-account-type { color: #829087; display: block; font-size: .68rem; margin-bottom: 3px; text-transform: capitalize; }
 .table-type { border-radius: 20px; display: inline-block; font-size: .72rem; font-weight: 800; padding: 5px 9px; text-transform: capitalize; }
 .table-type.income { background: #dff0df; color: #2c805c; }
 .table-type.expense { background: #fbe6df; color: #bd5c44; }
@@ -136,6 +139,22 @@ input:focus { border-color: #2c805c; box-shadow: 0 0 0 3px rgba(44, 128, 92, .13
 .row-delete-button { align-items: center; background: transparent; border: 1px solid transparent; border-radius: 3px; color: #b64737; cursor: pointer; display: inline-flex; justify-content: center; min-height: 34px; min-width: 34px; }
 .row-delete-button:hover:not(:disabled) { background: #fff0ed; border-color: #f0c2b9; }
 .row-delete-button:disabled { cursor: wait; opacity: .5; }
+.accounts-layout { align-items: start; display: grid; gap: 24px; grid-template-columns: minmax(280px, 380px) minmax(360px, 1fr); margin-bottom: 80px; }
+.account-form { margin: 0; }
+.account-list-panel { background: rgba(255, 255, 255, .78); border: 1px solid rgba(54, 83, 67, .14); border-radius: 4px; box-shadow: 0 20px 55px rgba(40, 67, 48, .08); min-height: 260px; padding: 30px; }
+.account-list-panel .section-header { margin-bottom: 20px; }
+.account-card-list { display: grid; gap: 12px; }
+.account-card { align-items: center; background: #f7f9f4; border: 1px solid #e1e7df; border-radius: 4px; display: flex; gap: 16px; justify-content: space-between; padding: 18px; }
+.account-card h3 { color: #21302b; font-size: 1rem; margin: 8px 0 0; }
+.account-card > strong { color: #21302b; font-size: 1.05rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.account-type-badge { background: #dcebdc; border-radius: 16px; color: #2c805c; display: inline-block; font-size: .68rem; font-weight: 800; padding: 5px 9px; text-transform: capitalize; }
+.account-type-badge.wallet { background: #e9e2f3; color: #69578b; }
+.account-type-badge.bank { background: #e0ebf2; color: #426a83; }
+.account-empty { color: #829087; font-size: .88rem; line-height: 1.6; }
+.account-empty p { margin-bottom: 10px; }
+.account-required-notice { background: #fff8e8; border-left: 3px solid #d5a43b; color: #735b27; font-size: .88rem; line-height: 1.55; margin-bottom: 20px; padding: 12px 14px; }
+.account-required-notice a { color: #2c805c; font-weight: 800; }
+.account-balance-hint { color: #829087; font-size: .76rem; }
 .delete-confirmation-overlay { align-items: center; background: rgba(23, 34, 29, .48); display: flex; inset: 0; justify-content: center; padding: 20px; position: fixed; z-index: 1000; }
 .delete-confirmation-dialog { background: #fff; border: 1px solid #e1e7df; border-radius: 8px; box-shadow: 0 24px 70px rgba(20, 36, 27, .24); max-width: 420px; padding: 28px; width: 100%; }
 .delete-confirmation-icon { align-items: center; background: #fff0ed; border-radius: 50%; color: #b64737; display: flex; height: 46px; justify-content: center; margin-bottom: 18px; width: 46px; }
@@ -187,6 +206,8 @@ input:focus { border-color: #2c805c; box-shadow: 0 0 0 3px rgba(44, 128, 92, .13
   .intro { padding: 48px 0 36px; }
   .content-grid { grid-template-columns: 1fr; }
   .transaction-form, .transactions-section { padding: 22px; }
+  .account-list-panel { padding: 22px; }
+  .accounts-layout { grid-template-columns: 1fr; }
   .profile-form { padding: 22px; }
   .records-toolbar { align-items: stretch; }
   .template-card { padding: 22px; }

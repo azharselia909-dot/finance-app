@@ -1,7 +1,7 @@
 import api from '../api'
 
 /**
- * @typedef {{ id: number, date: string, description: string, category: string, type: 'income' | 'expense', amount: string | number }} TransactionRecord
+ * @typedef {{ id: number, date: string, description: string, category: string, type: 'income' | 'expense', amount: string | number, account_id: number | null, account_name: string | null, account_type: 'cash' | 'wallet' | 'bank' | null }} TransactionRecord
  * @typedef {{ items: TransactionRecord[], total: number, page: number, page_size: number, total_pages: number }} PaginatedTransactionsResponse
  */
 
@@ -61,7 +61,7 @@ export async function downloadTransactionsCsv(startDate, endDate) {
 }
 
 export function downloadTransactionImportTemplate() {
-  const template = 'date,description,amount,category,type\r\n'
+  const template = 'date,description,amount,category,type,account_type,account_name\r\n'
   const blob = new Blob([template], { type: 'text/csv;charset=utf-8' })
   const downloadUrl = window.URL.createObjectURL(blob)
   const downloadLink = document.createElement('a')

@@ -6,7 +6,14 @@ from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from app.api.dependencies import DbSession, get_current_user
 from app.core.security import create_access_token, password_hash
 from app.models import User
-from app.schemas import LoginRequest, TokenResponse, UserCreate, UserResponse, UserUpdate
+from app.schemas import (
+    LoginRequest,
+    PasswordUpdateRequest,
+    TokenResponse,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
 
 router = APIRouter(prefix="/auth", tags=["authentication"])
 
@@ -97,6 +104,33 @@ async def update_current_user(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Profile could not be updated",
+        ) from exc
+
+    return current_user
+
+
+@router.patch("/me/password", response_model=UserResponse)
+async def update_current_user_password(
+    update: PasswordUpdateRequest,
+    db: DbSession,
+    current_user: Annotated[User, Depends(get_current_user)],
+) -> UserResponse:
+    if not password_hash.verify(update.current_password, current_user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Current password is incorrect",
+        )
+
+    current_user.hashed_password = password_hash.hash(update.new_password)
+
+    try:
+        db.commit()
+        db.refresh(current_user)
+    except SQLAlchemyError as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Password could not be updated",
         ) from exc
 
     return current_user

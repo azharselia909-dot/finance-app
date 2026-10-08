@@ -12,6 +12,7 @@ class TransactionCreate(BaseModel):
     date: Date
     category: str = Field(min_length=1, max_length=100)
     is_income: bool
+    account_id: int = Field(gt=0)
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -30,6 +31,8 @@ class TransactionImportRow(BaseModel):
     id: int | None = None
     type: Literal["income", "expense"] | None = None
     is_income: bool | None = None
+    account_type: Literal["cash", "wallet", "bank"] | None = None
+    account_name: str | None = Field(default=None, max_length=100)
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -54,6 +57,9 @@ class TransactionListItem(BaseModel):
     category: str
     type: Literal["income", "expense"]
     amount: Decimal
+    account_id: int | None
+    account_name: str | None
+    account_type: Literal["cash", "wallet", "bank"] | None
 
 
 class PaginatedTransactionsResponse(BaseModel):
@@ -94,6 +100,7 @@ class TransactionUpdate(BaseModel):
     amount: Decimal | None = Field(default=None, gt=0, max_digits=12, decimal_places=2)
     category: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
+    account_id: int | None = Field(default=None, gt=0)
 
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 

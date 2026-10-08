@@ -1,4 +1,12 @@
-from app.schemas.auth import LoginRequest, TokenResponse, UserCreate, UserResponse, UserUpdate
+from app.schemas.auth import (
+    LoginRequest,
+    PasswordUpdateRequest,
+    TokenResponse,
+    UserCreate,
+    UserResponse,
+    UserUpdate,
+)
+from app.schemas.accounts import AccountCreate, AccountResponse
 from app.schemas.transactions import (
     PaginatedTransactionsResponse,
     TransactionCreate,
@@ -13,8 +21,11 @@ from app.schemas.transactions import (
 )
 
 __all__ = [
+    "AccountCreate",
+    "AccountResponse",
     "LoginRequest",
     "PaginatedTransactionsResponse",
+    "PasswordUpdateRequest",
     "TokenResponse",
     "TransactionCreate",
     "TransactionImportResponse",

@@ -1,6 +1,6 @@
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy import Boolean, Column, Integer, String, Text
+from sqlalchemy import Boolean, Column, ForeignKey, Integer, String, Text
 from sqlalchemy.types import TypeDecorator
 
 from app.db.session import Base
@@ -28,6 +28,7 @@ class Transaction(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, index=True, nullable=True)
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True, index=True)
     description = Column(String, index=True)
     amount = Column(DecimalText(), nullable=False)
     date = Column(String)

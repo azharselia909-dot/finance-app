@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { BrowserRouter, NavLink, Route, Routes, useNavigate } from 'react-router-dom'
 import api from './api'
+import { fetchAccounts } from './services/accounts'
 import { downloadTransactionsCsv, fetchTransactionBalance } from './services/transactions'
+import AccountsPage from './pages/AccountsPage'
 import AuthPage from './pages/AuthPage'
 import ImportTemplatePage from './pages/ImportTemplatePage'
 import ProfilePage from './pages/ProfilePage'
@@ -14,6 +16,7 @@ const initialFormData = {
   description: '',
   is_income: false,
   date: '',
+  account_id: '',
 }
 
 function Layout({ children, user, onLogout }) {
@@ -24,6 +27,7 @@ function Layout({ children, user, onLogout }) {
         <nav className="main-nav" aria-label="Main navigation">
           <NavLink className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} to="/add">Add transaction</NavLink>
           <NavLink className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} to="/records">Saved records</NavLink>
+          <NavLink className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} to="/accounts">Accounts</NavLink>
           <NavLink className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} to="/import-template">CSV template</NavLink>
           <NavLink className={({ isActive }) => isActive ? 'nav-link active' : 'nav-link'} to="/profile">Profile</NavLink>
         </nav>
@@ -47,6 +51,10 @@ function AppContent() {
   const [isBalanceLoading, setIsBalanceLoading] = useState(false)
   const [balanceError, setBalanceError] = useState('')
   const balanceRequestId = useRef(0)
+  const [accounts, setAccounts] = useState([])
+  const [isAccountsLoading, setIsAccountsLoading] = useState(false)
+  const [accountsError, setAccountsError] = useState('')
+  const accountsRequestId = useRef(0)
 
   const refreshBalance = useCallback(async () => {
     const requestId = ++balanceRequestId.current
@@ -64,19 +72,40 @@ function AppContent() {
     }
   }, [])
 
+  const refreshAccounts = useCallback(async () => {
+    const requestId = ++accountsRequestId.current
+    setIsAccountsLoading(true)
+    setAccountsError('')
+    try {
+      const results = await fetchAccounts()
+      if (accountsRequestId.current === requestId) setAccounts(results)
+    } catch {
+      if (accountsRequestId.current === requestId) {
+        setAccountsError('Accounts could not be loaded. Please try again.')
+      }
+    } finally {
+      if (accountsRequestId.current === requestId) setIsAccountsLoading(false)
+    }
+  }, [])
+
   const handleAuthenticated = (authData) => {
     localStorage.setItem('access_token', authData.access_token)
     setUser(authData.user)
     void refreshBalance()
+    void refreshAccounts()
   }
 
   const handleLogout = useCallback(() => {
     balanceRequestId.current += 1
+    accountsRequestId.current += 1
     localStorage.removeItem('access_token')
     setUser(null)
     setBalance('0.00')
     setIsBalanceLoading(false)
     setBalanceError('')
+    setAccounts([])
+    setIsAccountsLoading(false)
+    setAccountsError('')
     navigate('/login', { replace: true })
   }, [navigate])
 
@@ -100,7 +129,7 @@ function AppContent() {
       try {
         const userResponse = await api.get('/auth/me')
         setUser(userResponse.data)
-        await refreshBalance()
+        await Promise.all([refreshBalance(), refreshAccounts()])
       } catch {
         handleLogout()
         setError('Your session could not be verified. Please sign in again.')
@@ -110,7 +139,7 @@ function AppContent() {
     }
 
     loadCurrentUser()
-  }, [handleLogout, refreshBalance])
+  }, [handleLogout, refreshBalance, refreshAccounts])
 
   if (isAuthLoading) return <div className="auth-loading">Loading your ledger...</div>
 
@@ -119,9 +148,12 @@ function AppContent() {
     setIsSubmitting(true)
     setError('')
     try {
-      await api.post('/transactions/', formData)
+      await api.post('/transactions/', {
+        ...formData,
+        account_id: Number(formData.account_id),
+      })
       setFormData(initialFormData)
-      await refreshBalance()
+      await Promise.all([refreshBalance(), refreshAccounts()])
       return true
     } catch {
       setError('Your transaction could not be saved. Please check the details and try again.')
@@ -135,9 +167,10 @@ function AppContent() {
     <>
       {!user ? <AuthPage onAuthenticated={handleAuthenticated} /> : <Layout user={user} onLogout={handleLogout}>
         <Routes>
-          <Route path="/" element={<TransactionFormPage formData={formData} setFormData={setFormData} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} error={error} balance={balance} balanceLoading={isBalanceLoading} balanceError={balanceError} />} />
-          <Route path="/add" element={<TransactionFormPage formData={formData} setFormData={setFormData} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} error={error} balance={balance} balanceLoading={isBalanceLoading} balanceError={balanceError} />} />
-          <Route path="/records" element={<RecordsPage error={error} exportError={exportError} isExporting={isExporting} onExport={handleExportTransactions} balance={balance} balanceLoading={isBalanceLoading} balanceError={balanceError} onTransactionsChanged={refreshBalance} />} />
+          <Route path="/" element={<TransactionFormPage accounts={accounts} accountsLoading={isAccountsLoading} formData={formData} setFormData={setFormData} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} error={error} balance={balance} balanceLoading={isBalanceLoading} balanceError={balanceError} />} />
+          <Route path="/add" element={<TransactionFormPage accounts={accounts} accountsLoading={isAccountsLoading} formData={formData} setFormData={setFormData} onSubmit={handleFormSubmit} isSubmitting={isSubmitting} error={error} balance={balance} balanceLoading={isBalanceLoading} balanceError={balanceError} />} />
+          <Route path="/records" element={<RecordsPage error={error} exportError={exportError} isExporting={isExporting} onExport={handleExportTransactions} balance={balance} balanceLoading={isBalanceLoading} balanceError={balanceError} onTransactionsChanged={() => Promise.all([refreshBalance(), refreshAccounts()])} accounts={accounts} />} />
+          <Route path="/accounts" element={<AccountsPage accounts={accounts} isLoading={isAccountsLoading} error={accountsError} onAccountsChanged={() => Promise.all([refreshAccounts(), refreshBalance()])} />} />
           <Route path="/import-template" element={<ImportTemplatePage />} />
           <Route path="/profile" element={<ProfilePage user={user} onProfileUpdated={setUser} />} />
         </Routes>

@@ -1,11 +1,15 @@
 # FastAPI finance API
 
 Install the backend dependencies with `pip install -r requirements.txt`, then run
-`python -m scripts.migrate_decimal_amount` from this directory before starting the API.
+`python -m scripts.migrate_decimal_amount` followed by
+`python -m scripts.migrate_accounts` from this directory before starting the API.
 The migration converts the SQLite `transactions.amount` column from floating
 point storage to exact decimal text storage, preserves existing rows and
 indexes, and creates the persistent rate-limit table. Back up `finance.db`
-before applying the migration.
+before applying migrations. The account migration creates the accounts table,
+adds `transactions.account_id`, and assigns existing user-owned transactions to
+each user's Cash account so existing balances are preserved. Transactions
+without a known user remain unassigned.
 
 The backend follows a package layout: `app/api` contains dependencies and
 versioned endpoints, `app/core` contains security, `app/db` configures database
@@ -22,13 +26,26 @@ The records API is authenticated and user-scoped:
   updates username, email, designation, and mobile number. Email and username
   must remain unique; the updated email is used for future sign-ins.
 - `GET /api/v1/transactions` supports `page`, `page_size` (maximum 100),
-  `search`, `sort_by`, `sort_order`, exact `category`, and inclusive
+  `search`, `sort_by` (`date`, `description`, `category`, `account`, `type`,
+  or `amount`), `sort_order`, exact `category`, and inclusive
   `date_range` bounds formatted as `YYYY-MM-DD,YYYY-MM-DD`.
 - `GET /api/v1/transactions/balance` returns the signed-in user's all-time
-  income-minus-expense balance as an exact decimal string.
+  account opening balances plus income-minus-expense as an exact decimal string.
+- `GET /api/v1/accounts` returns the signed-in user's cash, wallet, and bank
+  accounts with their current balances. `POST /api/v1/accounts` creates an
+  account with a unique per-user name and optional starting balance (maximum
+  100 accounts per user).
+- New transactions require an `account_id` belonging to the signed-in user.
+  Income increases the selected account; expenses decrease it. Account name and
+  type are included in transaction records and CSV exports. CSV imports without
+  account details are assigned to the user's Cash account. Exports include
+  optional `account_type` and `account_name` columns; imports validate these
+  against the signed-in user's existing accounts and reject unknown names.
 - `POST /api/v1/transactions/import` accepts a `text/csv` `.csv` upload up to
-  5 MB / 20,000 rows. CSV headers are `date,description,amount,category,type`,
-  with `type` set to `income` or `expense`. Existing exports using
+  5 MB / 20,000 rows. Required CSV headers are
+  `date,description,amount,category,type`, with `type` set to `income` or
+  `expense`. Optional `account_type` and `account_name` columns assign rows to
+  existing accounts. Existing exports using
   `date,description,amount,category,is_income` can also be imported. Invalid
   rows reject the entire import with row numbers and no records are committed.
   Imports append rows without content-based deduplication; submitting the same

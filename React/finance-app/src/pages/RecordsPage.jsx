@@ -22,6 +22,7 @@ function RecordsPage({
   balanceLoading,
   balanceError,
   onTransactionsChanged,
+  accounts,
 }) {
   const records = usePaginatedTransactions()
   const [selectedIds, setSelectedIds] = useState(() => new Set())
@@ -96,6 +97,7 @@ const openEditDialog = (transaction) => {
     description: transaction.description || '',
     category: transaction.category,
     amount: String(transaction.amount),
+    account_id: transaction.account_id == null ? '' : String(transaction.account_id),
   })
   setEditError('')
 }
@@ -119,6 +121,7 @@ const handleEditSubmit = async (event) => {
       description: editForm.description.trim(),
       category: editForm.category.trim(),
       amount: editForm.amount,
+      account_id: Number(editForm.account_id),
     })
     setEditingTransaction(null)
     setEditForm(null)
@@ -310,6 +313,18 @@ const handleEditSubmit = async (event) => {
                   type="number"
                   value={editForm.amount}
                 />
+                <label htmlFor="edit-transaction-account">Account</label>
+                <select
+                  id="edit-transaction-account"
+                  onChange={(event) => setEditForm((current) => ({ ...current, account_id: event.target.value }))}
+                  required
+                  value={editForm.account_id}
+                >
+                  <option value="">Select an account</option>
+                  {accounts.map((account) => (
+                    <option key={account.id} value={account.id}>{account.name} ({account.account_type})</option>
+                  ))}
+                </select>
                 {editError && <p className="edit-form-error" role="alert">{editError}</p>}
                 <div className="edit-form-actions">
                   <button className="delete-cancel-button" disabled={isSavingEdit} onClick={closeEditDialog} type="button">

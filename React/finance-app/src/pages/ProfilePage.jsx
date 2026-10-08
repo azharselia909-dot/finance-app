@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { getApiErrorMessage } from '../services/transactions'
-import { updateProfile } from '../services/profile'
+import { updatePassword, updateProfile } from '../services/profile'
 
 /**
  * @param {{
@@ -15,13 +15,27 @@ function ProfilePage({ user, onProfileUpdated }) {
     designation: user.designation,
     mobile_number: user.mobile_number,
   })
+  const [passwordForm, setPasswordForm] = useState({
+    current_password: '',
+    new_password: '',
+    confirm_password: '',
+  })
   const [isSaving, setIsSaving] = useState(false)
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false)
   const [error, setError] = useState('')
+  const [passwordError, setPasswordError] = useState('')
   const [success, setSuccess] = useState('')
+  const [passwordSuccess, setPasswordSuccess] = useState('')
 
   const updateField = (event) => {
     setForm((current) => ({ ...current, [event.target.name]: event.target.value }))
     setSuccess('')
+  }
+
+  const updatePasswordField = (event) => {
+    setPasswordForm((current) => ({ ...current, [event.target.name]: event.target.value }))
+    setPasswordError('')
+    setPasswordSuccess('')
   }
 
   const handleSubmit = async (event) => {
@@ -53,6 +67,41 @@ function ProfilePage({ user, onProfileUpdated }) {
     }
   }
 
+  const handlePasswordSubmit = async (event) => {
+    event.preventDefault()
+    if (isUpdatingPassword) return
+
+    if (passwordForm.new_password.length < 8) {
+      setPasswordError('Your new password must be at least 8 characters.')
+      return
+    }
+
+    if (passwordForm.new_password !== passwordForm.confirm_password) {
+      setPasswordError('Your new password and confirmation do not match.')
+      return
+    }
+
+    setIsUpdatingPassword(true)
+    setPasswordError('')
+    setPasswordSuccess('')
+    try {
+      await updatePassword({
+        current_password: passwordForm.current_password,
+        new_password: passwordForm.new_password,
+      })
+      setPasswordForm({
+        current_password: '',
+        new_password: '',
+        confirm_password: '',
+      })
+      setPasswordSuccess('Your password has been updated.')
+    } catch (requestError) {
+      setPasswordError(getApiErrorMessage(requestError, 'Password could not be updated. Please try again.'))
+    } finally {
+      setIsUpdatingPassword(false)
+    }
+  }
+
   return (
     <main className="dashboard">
       <section className="intro records-intro">
@@ -60,6 +109,7 @@ function ProfilePage({ user, onProfileUpdated }) {
         <h1>Your profile.</h1>
         <p className="intro-copy">Update the contact and account details associated with your finance ledger.</p>
       </section>
+
       <form className="profile-form" onSubmit={handleSubmit}>
         <div className="form-heading">
           <div>
@@ -125,6 +175,59 @@ function ProfilePage({ user, onProfileUpdated }) {
         {success && <p className="profile-success" role="status">{success}</p>}
         <button className="submit-button profile-save-button" disabled={isSaving} type="submit">
           {isSaving ? 'Saving profile...' : 'Save profile'}
+        </button>
+      </form>
+
+      <form className="profile-form" onSubmit={handlePasswordSubmit}>
+        <div className="form-heading">
+          <div>
+            <p className="section-kicker">Security</p>
+            <h2>Update password</h2>
+          </div>
+        </div>
+        <div className="field-group">
+          <label htmlFor="profile-current-password">Current password</label>
+          <input
+            autoComplete="current-password"
+            id="profile-current-password"
+            minLength={8}
+            name="current_password"
+            onChange={updatePasswordField}
+            required
+            type="password"
+            value={passwordForm.current_password}
+          />
+        </div>
+        <div className="field-group">
+          <label htmlFor="profile-new-password">New password</label>
+          <input
+            autoComplete="new-password"
+            id="profile-new-password"
+            minLength={8}
+            name="new_password"
+            onChange={updatePasswordField}
+            required
+            type="password"
+            value={passwordForm.new_password}
+          />
+        </div>
+        <div className="field-group">
+          <label htmlFor="profile-confirm-password">Confirm new password</label>
+          <input
+            autoComplete="new-password"
+            id="profile-confirm-password"
+            minLength={8}
+            name="confirm_password"
+            onChange={updatePasswordField}
+            required
+            type="password"
+            value={passwordForm.confirm_password}
+          />
+        </div>
+        {passwordError && <p className="form-error" role="alert">{passwordError}</p>}
+        {passwordSuccess && <p className="profile-success" role="status">{passwordSuccess}</p>}
+        <button className="submit-button profile-save-button" disabled={isUpdatingPassword} type="submit">
+          {isUpdatingPassword ? 'Updating password...' : 'Update password'}
         </button>
       </form>
     </main>

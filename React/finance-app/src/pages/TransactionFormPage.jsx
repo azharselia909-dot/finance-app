@@ -1,7 +1,9 @@
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import AccountBalance from '../components/AccountBalance'
 
 function TransactionFormPage({
+  accounts,
+  accountsLoading,
   formData,
   setFormData,
   onSubmit,
@@ -12,6 +14,7 @@ function TransactionFormPage({
   balanceError,
 }) {
   const navigate = useNavigate()
+  const selectedAccount = accounts.find((account) => String(account.id) === String(formData.account_id))
 
   const handleInputChange = (event) => {
     const value = event.target.type === 'checkbox' ? event.target.checked : event.target.value
@@ -28,9 +31,14 @@ function TransactionFormPage({
       <section className="intro">
         <p className="eyebrow">New transaction</p>
         <h1>Give every dollar a direction.</h1>
-        <p className="intro-copy">Add an income or expense and keep your everyday money decisions in one clear view.</p>
+        <p className="intro-copy">Choose an account, then record income or an expense to keep its balance up to date.</p>
       </section>
       <AccountBalance balance={balance} isLoading={balanceLoading} error={balanceError} />
+      {!accountsLoading && accounts.length === 0 && (
+        <p className="account-required-notice">
+          Create a cash, wallet, or bank account before recording a transaction. <Link to="/accounts">Manage accounts</Link>
+        </p>
+      )}
 
       <form className="transaction-form form-page" onSubmit={handleSubmit}>
         <div className="form-heading">
@@ -39,7 +47,21 @@ function TransactionFormPage({
         </div>
         <div className="field-group">
           <label htmlFor="amount">Amount</label>
-          <div className="amount-input"><span aria-hidden="true">$</span><input type="number" min="0" step="0.01" id="amount" name="amount" placeholder="0.00" required onChange={handleInputChange} value={formData.amount} /></div>
+          <div className="amount-input"><span aria-hidden="true">$</span><input type="number" min="0.01" step="0.01" id="amount" name="amount" placeholder="0.00" required onChange={handleInputChange} value={formData.amount} /></div>
+        </div>
+        <div className="field-group">
+          <label htmlFor="transaction-account">Account</label>
+          <select id="transaction-account" name="account_id" onChange={handleInputChange} required value={formData.account_id}>
+            <option value="">Select an account</option>
+            {accounts.map((account) => (
+              <option key={account.id} value={account.id}>{account.name} ({account.account_type})</option>
+            ))}
+          </select>
+          {selectedAccount && (
+            <span className="account-balance-hint">
+              Current balance: {new Intl.NumberFormat(undefined, { style: 'currency', currency: 'USD' }).format(Number(selectedAccount.balance))}
+            </span>
+          )}
         </div>
         <fieldset className="field-group type-field">
           <legend>Type</legend>
@@ -54,7 +76,7 @@ function TransactionFormPage({
         </div>
         <div className="field-group"><label htmlFor="description">Description <span>(optional)</span></label><input type="text" id="description" name="description" placeholder="What was this for?" onChange={handleInputChange} value={formData.description} /></div>
         {error && <p className="form-error" role="alert">{error}</p>}
-        <button className="submit-button" type="submit" disabled={isSubmitting}>{isSubmitting ? 'Saving...' : 'Save transaction'}<span aria-hidden="true">-&gt;</span></button>
+        <button className="submit-button" type="submit" disabled={isSubmitting || accountsLoading || accounts.length === 0}>{isSubmitting ? 'Saving...' : 'Save transaction'}<span aria-hidden="true">-&gt;</span></button>
       </form>
     </main>
   )
